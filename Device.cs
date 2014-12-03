@@ -72,13 +72,14 @@ namespace RocketNet
         public bool Connect(string host = "localhost", int port = DefaultPort)
         {
             if (player) throw new InvalidOperationException("Connect is only possible in client mode");
-
             Close();
 
+            // connect to editor
             sock = ServerConnect(host, port);
             if (sock == null)
                 return false;
 
+            // refresh track data
             foreach (var track in tracks)
             {
                 if (!GetTrackData(track))
@@ -98,6 +99,7 @@ namespace RocketNet
         {
             if (player) return true;
 
+            // parse command coming from editor
             while (sock != null && sock.Poll(0, SelectMode.SelectRead))
             {
                 if (!Receive(1)) return false;
@@ -130,6 +132,7 @@ namespace RocketNet
                 }
             }
 
+            // send row update to editor if applicable
             if (IsPlaying != null && IsPlaying() && row != this.row && sock != null)
             {
                 // per-frame alloc. meh. :(
@@ -152,6 +155,7 @@ namespace RocketNet
         {
             var track = tracks.Find(t => t.name == name);
 
+            // no track found? create new one and load data.
             if (track == null)
             {
                 track = new Track { name = name };
@@ -174,32 +178,35 @@ namespace RocketNet
             }
         }
 
-
+        // retrieve data for a track
         bool GetTrackData(Track t)
         {
             if (player)
             {
+                // Player: load .track file
                 var s = OpenStreamRead(MakeTrackPath(t.name));
                 t.Load(s);
                 return true;
             }
             else if (sock != null)
             {
+                // Client: send track data request to editor
+                // Editor will respond with a series of SetKey commands
                 var cmd = new[] { (byte)Command.GetTrack };
                 var nameLen = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(t.name.Length));
                 var nameBuf = Encoding.ASCII.GetBytes(t.name);
-
-                // send request data
                 return Send(cmd, nameLen, nameBuf);
             }
             else
                 return false;
         }
 
+        // parse SetKey command from editor
         void OnSetKey()
         {
             if (!Receive(13)) return;
 
+            // get key
             var track = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buffer, 0));
             var key = new Track.Key
             {
@@ -208,20 +215,24 @@ namespace RocketNet
                 type = (Track.Key.Type)buffer[12],
             };
           
+            // ... and set it
             tracks[track].SetKey(key);
         }
        
+        // parse DelKey command from editor
         void OnDelKey()
         {
             if (!Receive(8)) return;
            
+            // get track/row
             var track = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buffer, 0));
             var row = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(buffer, 4));
 
+            // ... and delete.
             tracks[track].DeleteKey(row);
         }
 
-
+        // Receive a number of bytes into buffer, close socket if there's an error
         bool Receive(int length)
         {
             try
@@ -240,7 +251,7 @@ namespace RocketNet
             return true;
         }
 
-
+        // send all the specified buffers, close socket if there's an error
         bool Send(params byte[][] buffers)
         {
             foreach (var b in buffers)
@@ -262,7 +273,8 @@ namespace RocketNet
 
             return true;
         }
-
+        
+        // close the socket
         void Close()
         {
             if (sock != null)
@@ -272,19 +284,23 @@ namespace RocketNet
             }
         }
 
+        // make file name for a track
         string MakeTrackPath(string name)
         {
             return @base + "_" + name + ".track";
         }
 
+        // reinterpret 32bit int as float (same bits)
         static float Int2Float(int i)
         {
             // slowest method ever but "weird stuff" free :)
             return BitConverter.ToSingle(BitConverter.GetBytes(i), 0);
         }
 
+        // try to connect to a server and return socket
         static Socket ServerConnect(string host, int port)
         {
+            // try all resolved addresses for the host...
             foreach (var addr in Dns.GetHostAddresses(host))
             {
                 Socket sock;

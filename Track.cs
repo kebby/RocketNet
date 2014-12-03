@@ -14,14 +14,17 @@ namespace RocketNet
         /// </summary>
         /// <param name="row">Current row (floating point because time is continuous and in flux and shit)</param>
         /// <returns>Track value for given row</returns>
-        public double GetValue(double row)
+        public float GetValue(float row)
         {	       
 	        // If we have no keys at all, return a constant 0 
 	        if (keys.Count == 0)
 		        return 0.0f;
 
+            // find key at/before the current row
 	        var irow = (int)Math.Floor(row);
-	        var idx = IdxFloor(irow);
+	        var idx = FindKey(irow);
+            if (idx < 0)
+                idx = -idx - 2;
 
 	        // at the edges, return the first/last value 
 	        if (idx < 0)
@@ -30,7 +33,7 @@ namespace RocketNet
                 return keys[keys.Count - 1].value;
 
 	        // interpolate according to key-type 
-            double t = (row - keys[idx].row) / (keys[idx + 1].row - keys[idx].row);
+            float t = (row - keys[idx].row) / (keys[idx + 1].row - keys[idx].row);
 	        switch (keys[idx].type) 
             {
 	        case Key.Type.Step:
@@ -40,20 +43,13 @@ namespace RocketNet
                 t = t * t * (3 - 2 * t);
                 break;
             case Key.Type.Ramp:
-                t = Math.Pow(t, 2.0);
+                t = (float)Math.Pow(t, 2.0);
                 break;            
 	        }
             return keys[idx].value + (keys[idx + 1].value - keys[idx].value) * t;
         }
 
-        int IdxFloor(int row)
-        {
-            int idx = FindKey(row);
-            if (idx < 0)
-                idx = -idx - 2;
-            return idx;
-        }
-
+        // find key at or after the given row
         int FindKey(int row)
         {
             int lo = 0;
@@ -76,6 +72,7 @@ namespace RocketNet
             return -lo - 1;
         }
 
+        // create/set a key
         internal void SetKey(Key key)
         {
             int idx = FindKey(key.row);
@@ -90,6 +87,7 @@ namespace RocketNet
     	        keys[idx] = key;
         }
 
+        // delete a key
         internal void DeleteKey(int row)
         {
 	        int idx = FindKey(row);
@@ -98,6 +96,7 @@ namespace RocketNet
             keys.RemoveAt(idx);
         }
         
+        // load track from a stream
         internal void Load(Stream s)
         {
             using (var br = new BinaryReader(s))
@@ -111,16 +110,17 @@ namespace RocketNet
                     float value = br.ReadSingle();
                     int type = br.ReadByte();
 
-                    keys.Add(new Track.Key
+                    keys.Add(new Key
                     {
                         row = row,
                         value = value,
-                        type = (Track.Key.Type)type,
+                        type = (Key.Type)type,
                     });
                 }
             }
         }
 
+        // save track to a stream
         internal void Save(Stream s)
         {
             using (var bw = new BinaryWriter(s))
