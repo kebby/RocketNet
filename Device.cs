@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -80,9 +79,6 @@ namespace RocketNet
             if (sock == null)
                 return false;
 
-            foreach (var track in tracks)
-                track.keys = new Track.Key[0];
-            
             foreach (var track in tracks)
             {
                 if (!GetTrackData(track))
@@ -172,49 +168,19 @@ namespace RocketNet
         public void SaveTracks()
         {
             foreach (var track in tracks)
-                SaveTrack(track);
-        }
-
-
-        void SaveTrack(Track t)
-        {
-            var s = OpenStreamWrite(MakeTrackPath(t.name));
-            using (var bw = new BinaryWriter(s))
             {
-                bw.Write((Int32)t.keys.Length);
-                for (int i = 0; i < t.keys.Length; i++)
-                {
-                    bw.Write((Int32)t.keys[i].row);
-                    bw.Write((Single)t.keys[i].value);
-                    bw.Write((byte)t.keys[i].type);
-                }
+                var s = OpenStreamWrite(MakeTrackPath(track.name));
+                track.Save(s);
             }
         }
+
 
         bool GetTrackData(Track t)
         {
             if (player)
             {
                 var s = OpenStreamRead(MakeTrackPath(t.name));
-                using (var br = new BinaryReader(s))
-                {
-                    int nKeys = br.ReadInt32();
-                    t.keys = new Track.Key[nKeys];
-                    for (int i = 0; i < nKeys; i++)
-                    {
-                        int row = br.ReadInt32();
-                        float value = br.ReadSingle();
-                        int type = br.ReadByte();
-
-                        t.keys[i] = new Track.Key
-                        {
-                            row = row,
-                            value = value,
-                            type = (Track.Key.Type)type,
-                        };
-                    }
-                }
-
+                t.Load(s);
                 return true;
             }
             else if (sock != null)
@@ -223,7 +189,7 @@ namespace RocketNet
                 var nameLen = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(t.name.Length));
                 var nameBuf = Encoding.ASCII.GetBytes(t.name);
 
-                /* send request data */
+                // send request data
                 return Send(cmd, nameLen, nameBuf);
             }
             else
@@ -380,7 +346,7 @@ namespace RocketNet
         string @base;
         bool player;
 
-        public List<Track> tracks = new List<Track>();
+        List<Track> tracks = new List<Track>();
 
         // client only
         byte[] buffer = new byte[64];

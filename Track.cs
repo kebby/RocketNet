@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace RocketNet
 {
@@ -14,20 +16,20 @@ namespace RocketNet
         /// <returns>Track value for given row</returns>
         public double GetValue(double row)
         {	       
-	        /* If we have no keys at all, return a constant 0 */
-	        if (keys == null || keys.Length == 0)
+	        // If we have no keys at all, return a constant 0 
+	        if (keys.Count == 0)
 		        return 0.0f;
 
 	        var irow = (int)Math.Floor(row);
 	        var idx = IdxFloor(irow);
 
-	        /* at the edges, return the first/last value */
+	        // at the edges, return the first/last value 
 	        if (idx < 0)
 		        return keys[0].value;
-	        if (idx > keys.Length - 2)
-                return keys[keys.Length - 1].value;
+	        if (idx > keys.Count - 2)
+                return keys[keys.Count - 1].value;
 
-	        /* interpolate according to key-type */
+	        // interpolate according to key-type 
             double t = (row - keys[idx].row) / (keys[idx + 1].row - keys[idx].row);
 	        switch (keys[idx].type) 
             {
@@ -55,9 +57,9 @@ namespace RocketNet
         int FindKey(int row)
         {
             int lo = 0;
-            int hi = keys.Length;
+            int hi = keys.Count;
 
-            /* binary search, t->keys is sorted by row */
+            // binary search, t->keys is sorted by row 
             while (lo < hi)
             {
                 int mi = (lo + hi) / 2;
@@ -67,10 +69,10 @@ namespace RocketNet
                 else if (keys[mi].row > row)
                     hi = mi;
                 else
-                    return mi; /* exact hit */
+                    return mi; // exact hit 
             }
 
-            /* return first key after row, negated and biased (to allow -0) */
+            // return first key after row, negated and biased (to allow -0) 
             return -lo - 1;
         }
 
@@ -80,16 +82,12 @@ namespace RocketNet
 
 	        if (idx < 0) 
             {
-		        /* no exact hit, we need to allocate a new key */
+		        // no exact hit, we need to allocate a new key 
 		        idx = -idx - 1;
-
-                var tmp = new Key[keys.Length+1];
-                Array.Copy(keys, 0, tmp, 0, idx);
-                Array.Copy(keys, idx, tmp, idx+1, keys.Length-idx);
-                keys = tmp;
+                keys.Insert(idx, key);
 	        }
-
-	        keys[idx] = key;
+            else
+    	        keys[idx] = key;
         }
 
         internal void DeleteKey(int row)
@@ -97,20 +95,54 @@ namespace RocketNet
 	        int idx = FindKey(row);
             if (idx < 0) throw new InvalidOperationException("key not found");
 
-            var tmp = new Key[keys.Length-1];
-            Array.Copy(keys, 0, tmp, 0, idx);
-            Array.Copy(keys, idx+1, tmp, idx, tmp.Length-idx);
-            keys = tmp;
+            keys.RemoveAt(idx);
         }
         
+        internal void Load(Stream s)
+        {
+            using (var br = new BinaryReader(s))
+            {
+                int nKeys = br.ReadInt32();
+                keys.Clear();
+                keys.Capacity = nKeys;
+                for (int i = 0; i < nKeys; i++)
+                {
+                    int row = br.ReadInt32();
+                    float value = br.ReadSingle();
+                    int type = br.ReadByte();
+
+                    keys.Add(new Track.Key
+                    {
+                        row = row,
+                        value = value,
+                        type = (Track.Key.Type)type,
+                    });
+                }
+            }
+        }
+
+        internal void Save(Stream s)
+        {
+            using (var bw = new BinaryWriter(s))
+            {
+                bw.Write((Int32)keys.Count);
+                foreach (var key in keys)
+                {
+                    bw.Write((Int32)key.row);
+                    bw.Write((Single)key.value);
+                    bw.Write((byte)key.type);
+                }
+            }
+        }
+
         internal struct Key
         {
             public enum Type
             {
-                Step,   /* stay constant */
-                Linear, /* lerp to the next value */
-                Smooth, /* smooth curve to the next value */
-                Ramp,   /* quadratic curve to the next value (ease-in) */
+                Step   = 0, // stay constant 
+                Linear = 1, // lerp to the next value 
+                Smooth = 2, // smooth curve to the next value 
+                Ramp   = 3, // quadratic curve to the next value (ease-in) 
             }
             public int row;
             public float value;
@@ -118,6 +150,6 @@ namespace RocketNet
         }
 
         internal string name;
-        internal Key[] keys = new Key[0];
+        private List<Key> keys = new List<Key>();
     }
 }
