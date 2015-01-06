@@ -13,12 +13,16 @@ namespace RocketNet
         /// Retrieve track value for a certain point in time
         /// </summary>
         /// <param name="row">Current row (floating point because time is continuous and in flux and shit)</param>
+        /// <param name="sinceRows">Difference of current row and the row of the preceding keyframe</param>
         /// <returns>Track value for given row</returns>
-        public float GetValue(float row)
+        public float GetValue(float row, out float sinceRows)
         {	       
 	        // If we have no keys at all, return a constant 0 
-	        if (keys.Count == 0)
-		        return 0.0f;
+            if (keys.Count == 0)
+            {
+                sinceRows = row;
+                return 0.0f;
+            }
 
             // find key at/before the current row
 	        var irow = (int)Math.Floor(row);
@@ -27,10 +31,16 @@ namespace RocketNet
                 idx = -idx - 2;
 
 	        // at the edges, return the first/last value 
-	        if (idx < 0)
-		        return keys[0].value;
-	        if (idx > keys.Count - 2)
+            if (idx < 0)
+            {
+                sinceRows = row - keys[0].row;
+                return keys[0].value;
+            }
+            if (idx > keys.Count - 2)
+            {
+                sinceRows = row - keys[keys.Count - 1].row;
                 return keys[keys.Count - 1].value;
+            }
 
 	        // interpolate according to key-type 
             float t = (row - keys[idx].row) / (keys[idx + 1].row - keys[idx].row);
@@ -46,7 +56,19 @@ namespace RocketNet
                 t = (float)Math.Pow(t, 2.0);
                 break;            
 	        }
+            sinceRows = row - keys[idx].row;
             return keys[idx].value + (keys[idx + 1].value - keys[idx].value) * t;
+        }
+
+        /// <summary>
+        /// Retrieve track value for a certain point in time
+        /// </summary>
+        /// <param name="row">Current row (floating point because time is continuous and in flux and shit)</param>
+        /// <returns>Track value for given row</returns>
+        public float GetValue(float row)
+        {
+            float dummy;
+            return GetValue(row, out dummy);
         }
 
         // find key at or after the given row
